@@ -1,0 +1,4 @@
+source,report_id,ata_chapter,narrative
+FAA SDR sample,SDR-DEMO-001,29,"Hydraulic pressure indication fluctuated during climb; inspection focused on pump, lines, and associated sensing components."
+FAA SDR sample,SDR-DEMO-002,24,"Intermittent generator control indication was reported during operation; wiring and connector condition were evaluated."
+FAA SDR sample,SDR-DEMO-003,31,"Display intermittency was reported during power-up; connector and line-replaceable-unit checks were documented."

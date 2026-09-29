@@ -1,0 +1,57 @@
+{
+  "dataset": "TailMemory synthetic maintenance histories",
+  "disclosure": "All aircraft records are synthetic and are not real aircraft records.",
+  "held_out_faults": [
+    {
+      "tail_number": "VT-ABC",
+      "fault": "Hydraulic pressure warning after takeoff",
+      "root_cause_category": "hydraulic return-line restriction",
+      "failed_actions": [
+        "Replaced hydraulic pump",
+        "Replaced hydraulic pump again"
+      ]
+    },
+    {
+      "tail_number": "VT-DEF",
+      "fault": "Intermittent electrical bus caution",
+      "root_cause_category": "electrical harness or connector",
+      "failed_actions": [
+        "Reset generator control unit",
+        "Replaced generator control unit"
+      ]
+    },
+    {
+      "tail_number": "VT-GHI",
+      "fault": "Primary display blank during power-up",
+      "root_cause_category": "display connector",
+      "failed_actions": [
+        "Replaced display unit",
+        "Replaced display unit again"
+      ]
+    },
+    {
+      "tail_number": "VT-JKL",
+      "fault": "Low fuel flow indication",
+      "root_cause_category": "fuel flow sensor harness",
+      "failed_actions": [
+        "Replaced fuel filter",
+        "Replaced fuel filter again"
+      ]
+    },
+    {
+      "tail_number": "VT-MNO",
+      "fault": "Brake temperature warning after taxi",
+      "root_cause_category": "brake temperature probe wiring",
+      "failed_actions": [
+        "Replaced brake control unit",
+        "Replaced brake control unit again"
+      ]
+    },
+    {
+      "tail_number": "VT-XYZ",
+      "fault": "Hydraulic pressure warning after takeoff",
+      "root_cause_category": "unknown aircraft-specific cause",
+      "failed_actions": []
+    }
+  ]
+}
