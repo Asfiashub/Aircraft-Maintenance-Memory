@@ -22,7 +22,6 @@ class Settings:
     hindsight_base_url: str
     hindsight_bank_id: str | None
     groq_primary_model: str = "openai/gpt-oss-120b"
-    groq_fallback_model: str = "qwen/qwen3-32b"
 
     @property
     def hindsight_configured(self) -> bool:

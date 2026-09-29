@@ -1,15 +1,11 @@
 from __future__ import annotations
-
 import sys
 from pathlib import Path
-
 import pandas as pd
 import streamlit as st
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
 from app.config import EVALUATION_DIR, get_settings
 from app.data.loader import events_for_tail, known_tails, load_events, load_faa_sample
 from backend.agent.llm import DiagnosisAgent, GroqAPIError, GroqConfigurationError
@@ -18,8 +14,6 @@ from backend.memory.hindsight_client import (
     HindsightClient,
     HindsightConfigurationError,
 )
-
-
 st.set_page_config(
     page_title="TailMemory",
     page_icon=None,
@@ -27,7 +21,461 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
+:root{
+  --bg:#111447;
+  --bg2:#151950;
+  --panel:#1a1d58;
+  --panel2:#202461;
+  --line:#3d417b;
+  --text:#f5f6ff;
+  --muted:#aeb4d5;
+
+  --pink:#f36b9b;
+  --cyan:#50d9e8;
+  --purple:#8c82e8;
+  --mint:#83e2b0;
+  --yellow:#f4d56d;
+  --red:#f46f86;
+  --white:#ffffff;
+
+  --sans:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'Space Mono',ui-monospace,Consolas,monospace;
+}
+
+.stApp{
+  background:
+    radial-gradient(circle at 12% 8%,rgba(243,107,155,.13),transparent 24%),
+    radial-gradient(circle at 88% 12%,rgba(80,217,232,.12),transparent 24%),
+    linear-gradient(135deg,#111447 0%,#151950 52%,#101342 100%);
+  color:var(--text);
+  font-family:var(--sans);
+}
+
+#MainMenu,
+footer{
+  visibility:hidden;
+}
+
+[data-testid="stHeader"]{
+  background:rgba(17,20,71,.78);
+  backdrop-filter:blur(10px);
+}
+
+.block-container{
+  padding:2rem 2.4rem 3rem;
+  max-width:1400px;
+}
+
+/* SIDEBAR */
+[data-testid="stSidebar"]{
+  background:linear-gradient(180deg,#171a52,#111447);
+  border-right:1px solid #34386e;
+}
+
+[data-testid="stSidebar"] *{
+  color:var(--text);
+}
+
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stTextInput label{
+  color:var(--muted)!important;
+}
+
+/* HEADINGS */
+h1,
+h2,
+h3{
+  font-family:var(--sans)!important;
+  color:var(--text)!important;
+  letter-spacing:.01em;
+}
+
+h1{
+  font-weight:700;
+}
+
+h2{
+  font-size:1.02rem!important;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  border:0!important;
+  padding:0 0 .7rem!important;
+  margin-top:1.8rem!important;
+  position:relative;
+}
+
+h2:after{
+  content:"";
+  display:block;
+  width:62px;
+  height:3px;
+  margin-top:8px;
+  border-radius:5px;
+  background:linear-gradient(
+    90deg,
+    var(--pink),
+    var(--purple),
+    var(--cyan)
+  );
+}
+
+/* BUTTONS */
+.stButton>button{
+  background:#222660;
+  border:1px solid #4b4f88;
+  color:var(--text);
+  font-family:var(--sans);
+  font-weight:600;
+  letter-spacing:.03em;
+  border-radius:8px;
+  min-height:42px;
+  transition:.18s ease;
+}
+
+.stButton>button:hover{
+  border-color:var(--cyan);
+  color:var(--white);
+  background:#292d6b;
+  box-shadow:0 0 18px rgba(80,217,232,.16);
+  transform:translateY(-1px);
+}
+
+.stButton>button[kind="primary"]{
+  background:linear-gradient(
+    90deg,
+    var(--pink),
+    #c96bd1
+  );
+  color:#fff;
+  border:none;
+  box-shadow:0 8px 24px rgba(243,107,155,.18);
+}
+
+.stButton>button[kind="primary"]:hover{
+  background:linear-gradient(
+    90deg,
+    #f579a5,
+    #b879e0
+  );
+  color:#fff;
+}
+
+/* INPUTS */
+textarea,
+input{
+  background:#15194d!important;
+  color:var(--text)!important;
+  border:1px solid #454a82!important;
+  font-family:var(--sans)!important;
+  border-radius:8px!important;
+}
+
+textarea:focus,
+input:focus{
+  border-color:var(--cyan)!important;
+  box-shadow:0 0 0 1px rgba(80,217,232,.65)!important;
+}
+
+[data-baseweb="select"]>div{
+  background:#181c53;
+  border-color:#454a82;
+  border-radius:8px;
+}
+
+/* EXPANDERS */
+[data-testid="stExpander"]{
+  background:rgba(27,30,87,.82);
+  border:1px solid #3c4178;
+  border-radius:10px;
+}
+
+[data-testid="stExpander"]:hover{
+  border-color:#565c99;
+}
+
+/* ALERTS */
+.stAlert{
+  border-radius:9px!important;
+  background:#20235f!important;
+  border:1px solid #474c87!important;
+}
+
+/* TAILMEMORY HEADER */
+.tm-title{
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:2.8rem;
+  letter-spacing:.08em;
+  color:var(--white);
+  margin:0;
+  line-height:1.05;
+}
+
+.tm-title:after{
+  content:"";
+  display:block;
+  width:92px;
+  height:4px;
+  margin-top:12px;
+  border-radius:8px;
+  background:linear-gradient(
+    90deg,
+    var(--pink),
+    var(--purple),
+    var(--cyan)
+  );
+}
+
+.tm-tag{
+  color:var(--muted);
+  font-size:.95rem;
+  line-height:1.55;
+  max-width:780px;
+  margin:.7rem 0 1rem;
+}
+
+/* STATUS PILLS */
+.pill{
+  display:inline-block;
+  font-family:var(--sans);
+  font-size:.68rem;
+  font-weight:700;
+  letter-spacing:.08em;
+  padding:5px 11px;
+  margin-right:8px;
+  border:1px solid var(--c);
+  color:var(--c);
+  border-radius:999px;
+  background:rgba(255,255,255,.035);
+}
+
+/* MAIN PANELS */
+.panel{
+  background:linear-gradient(
+    145deg,
+    rgba(31,35,96,.96),
+    rgba(24,27,77,.96)
+  );
+  border:1px solid #3e437b;
+  border-radius:12px;
+  padding:18px 20px;
+  position:relative;
+  margin-bottom:14px;
+  box-shadow:0 10px 30px rgba(4,5,30,.12);
+}
+
+.panel::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:12px;
+  bottom:12px;
+  width:3px;
+  border-radius:4px;
+  background:var(--a,var(--cyan));
+}
+
+/* LABELS */
+.label{
+  font-family:var(--sans);
+  font-size:.67rem;
+  font-weight:700;
+  letter-spacing:.12em;
+  color:var(--muted);
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+
+/* AIRFRAME READOUT */
+.readout{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+}
+
+.readout>div{
+  padding:13px 14px;
+  background:rgba(255,255,255,.025);
+  border:1px solid #34396f;
+  border-radius:9px;
+}
+
+.readout .v{
+  font-family:var(--mono);
+  font-size:1.35rem;
+  color:var(--cyan);
+}
+
+.readout .bad{
+  color:var(--pink);
+}
+
+/* BANNERS */
+.banner{
+  border:1px solid #635a8d;
+  background:linear-gradient(
+    90deg,
+    rgba(243,107,155,.08),
+    rgba(140,130,232,.08)
+  );
+  color:#e9eaff;
+  border-radius:9px;
+  padding:12px 16px;
+  margin-bottom:14px;
+}
+
+/* CHIPS */
+.chip{
+  display:inline-block;
+  font-family:var(--sans);
+  font-size:.65rem;
+  font-weight:700;
+  letter-spacing:.08em;
+  padding:3px 9px;
+  border:1px solid var(--c);
+  color:var(--c);
+  border-radius:999px;
+  background:rgba(255,255,255,.025);
+  white-space:nowrap;
+}
+
+/* TAGS */
+.tag{
+  display:inline-block;
+  font-family:var(--sans);
+  font-size:.76rem;
+  padding:5px 10px;
+  margin:0 6px 6px 0;
+  border:1px solid #464b84;
+  border-radius:7px;
+  color:var(--text);
+  background:#20245f;
+}
+
+/* LIST ITEMS */
+.item{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  justify-content:space-between;
+  padding:10px 0;
+  border-bottom:1px dashed #414578;
+}
+
+.item:last-child{
+  border-bottom:none;
+}
+
+.eid{
+  font-family:var(--mono);
+  color:var(--cyan);
+  font-size:.74rem;
+}
+
+.sub{
+  color:var(--muted);
+  font-size:.84rem;
+}
+
+/* CONFIDENCE METER */
+.meter span{
+  display:inline-block;
+  width:40px;
+  height:7px;
+  margin-right:5px;
+  border-radius:3px;
+  background:#3b4075;
+}
+
+.meter span.on{
+  background:linear-gradient(
+    90deg,
+    var(--pink),
+    var(--purple)
+  );
+  box-shadow:0 0 10px rgba(243,107,155,.28);
+}
+
+/* TIMELINE */
+.tl{
+  max-height:560px;
+  overflow-y:auto;
+  padding:4px 8px 0;
+}
+
+.tl-item{
+  position:relative;
+  margin-left:8px;
+  padding:0 0 18px 24px;
+  border-left:2px solid #3d4177;
+}
+
+.tl-item::before{
+  content:"";
+  position:absolute;
+  left:-7px;
+  top:3px;
+  width:12px;
+  height:12px;
+  border-radius:50%;
+  background:var(--c);
+  box-shadow:0 0 12px var(--c);
+}
+
+.tl-top{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+  margin-bottom:3px;
+}
+
+/* STREAMLIT METRICS */
+[data-testid="stMetric"]{
+  background:#1e225d;
+  border:1px solid #3e437b;
+  border-radius:10px;
+  padding:12px;
+}
+
+/* DATAFRAMES */
+[data-testid="stDataFrame"]{
+  border:1px solid #3e437b;
+  border-radius:10px;
+  overflow:hidden;
+}
+
+/* CAPTIONS */
+[data-testid="stCaptionContainer"]{
+  color:var(--muted);
+}
+
+hr{
+  border-color:#373c73!important;
+}
+
+/* RESPONSIVE */
+@media (max-width:900px){
+  .block-container{
+    padding:1.2rem 1rem 2rem;
+  }
+
+  .readout{
+    grid-template-columns:repeat(2,1fr);
+  }
+
+  .tm-title{
+    font-size:2.1rem;
+  }
+}
+</style>
+"""
+st.markdown(CSS, unsafe_allow_html=True)
 @st.cache_data
 def get_events():
     return load_events()
@@ -115,13 +563,17 @@ def main():
     st.title("TailMemory")
     st.subheader("Maintenance memory for every airframe.")
     st.write(
+        "TailMemory is an AI-powered aircraft maintenance assistant that uses historical maintenance records to retrieve similar faults, provide evidence-based insights, and support technicians in diagnosing recurring aircraft issues."
         "A maintenance assistant that remembers what every previous shift already "
         "tried on this airframe."
     )
-    st.info(
-        "Advisory prototype. Maintenance decisions remain with appropriately qualified "
-        "personnel. All aircraft records shown here are synthetic."
-    )
+    st.markdown(
+    '<div style="color: white;">'
+    'Advisory prototype. Maintenance decisions remain with appropriately qualified '
+    'personnel. All aircraft records shown here are synthetic.'
+    '</div>',
+    unsafe_allow_html=True
+)
 
     with st.sidebar:
         st.header("Aircraft")
@@ -141,7 +593,15 @@ def main():
             )
 
     st.header("New Maintenance Fault")
+    st.markdown("""
+<style>
+textarea {
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
     fault = st.text_area(
+        
         "Describe the current fault",
         value="Hydraulic pressure warning after takeoff."
         if tail_number == "VT-ABC"

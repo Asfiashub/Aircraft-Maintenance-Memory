@@ -149,43 +149,86 @@ class HindsightClient:
 
     @staticmethod
     def _parse_recall(data: dict[str, Any], requested_tail: str) -> list[RecalledMemory]:
-        raw_items = data.get("results") or data.get("memories") or data.get("items") or []
-        if not isinstance(raw_items, list):
-            return []
+        """Parse a Hindsight recall response.
+
+        Hindsight returns synthesized facts/observations under ``results`` and the
+        original retained records under ``chunks``. Chunks keep our exact
+        "Event ID ... Outcome status" text, so they are parsed first and are the
+        primary evidence. Observations are kept as clearly labeled summaries.
+        """
+        chunks = data.get("chunks")
+        if isinstance(chunks, dict):
+            chunk_items = list(chunks.values())
+        elif isinstance(chunks, list):
+            chunk_items = chunks
+        else:
+            chunk_items = []
+        result_items = data.get("results") or data.get("memories") or data.get("items") or []
+        if not isinstance(result_items, list):
+            result_items = []
+
         memories: list[RecalledMemory] = []
-        for item in raw_items:
-            if not isinstance(item, dict):
+        seen_events: set[str] = set()
+        sources = [(item, "Hindsight chunk (original record)") for item in chunk_items] + [
+            (item, "Hindsight observation (synthesized)") for item in result_items
+        ]
+        for item, source_type in sources:
+            memory = HindsightClient._item_to_memory(item, requested_tail, source_type)
+            if memory is None:
                 continue
-            content = (
-                item.get("content")
-                or item.get("text")
-                or item.get("memory")
-                or item.get("observation")
-                or ""
-            )
-            if isinstance(content, dict):
-                content = content.get("text") or content.get("content") or str(content)
-            content = str(content)
-            metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-            parsed_tail = metadata.get("tail_number") or _match(content, r"Tail number:\s*([A-Z0-9-]+)")
-            if parsed_tail and parsed_tail != requested_tail:
-                continue
-            memories.append(
-                RecalledMemory(
-                    event_id=metadata.get("event_id") or _match(content, r"Event ID:\s*([A-Z0-9-]+)"),
-                    tail_number=parsed_tail or requested_tail,
-                    date=metadata.get("date") or _match(content, r"Date:\s*([0-9-]+)"),
-                    ata_chapter=metadata.get("ata_chapter") or _match(content, r"ATA chapter:\s*([0-9]+)"),
-                    symptom=_match(content, r"Symptom:\s*(.+?)(?:\. Diagnostic action:|$)") or content[:240],
-                    diagnostic_action=_match(content, r"Diagnostic action:\s*(.+?)(?:\. Action taken:|$)"),
-                    action_taken=_match(content, r"Action taken:\s*(.+?)(?:\. Component:|$)"),
-                    component=_match(content, r"Component:\s*(.+?)(?:\. Outcome:|$)"),
-                    outcome=_match(content, r"Outcome:\s*(.+?)(?:\. Outcome status:|$)"),
-                    outcome_status=_match(content, r"Outcome status:\s*(\w+)"),
-                    raw_content=content,
-                )
-            )
+            if memory.event_id:
+                if memory.event_id in seen_events:
+                    continue
+                seen_events.add(memory.event_id)
+            memories.append(memory)
         return memories
+
+    @staticmethod
+    def _item_to_memory(
+        item: Any, requested_tail: str, source_type: str
+    ) -> RecalledMemory | None:
+        if not isinstance(item, dict):
+            return None
+        content = (
+            item.get("content")
+            or item.get("text")
+            or item.get("memory")
+            or item.get("observation")
+            or ""
+        )
+        if isinstance(content, dict):
+            content = content.get("text") or content.get("content") or str(content)
+        content = str(content)
+        if not content.strip():
+            return None
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        parsed_tail = (
+            metadata.get("tail_number")
+            or _match(content, r"Tail number:\s*([A-Z0-9-]+)")
+            or _feedback_tail(content)
+        )
+        if parsed_tail and parsed_tail != requested_tail:
+            return None
+        return RecalledMemory(
+            event_id=metadata.get("event_id") or _match(content, r"Event ID:\s*([A-Z0-9-]+)"),
+            tail_number=parsed_tail or requested_tail,
+            date=metadata.get("date") or _match(content, r"Date:\s*([0-9-]+)"),
+            ata_chapter=metadata.get("ata_chapter") or _match(content, r"ATA chapter:\s*([0-9]+)"),
+            symptom=_match(content, r"Symptom:\s*(.+?)(?:\. Diagnostic action:|$)") or content[:400],
+            diagnostic_action=_match(content, r"Diagnostic action:\s*(.+?)(?:\. Action taken:|$)"),
+            action_taken=_match(content, r"Action taken:\s*(.+?)(?:\. Component:|$)"),
+            component=_match(content, r"Component:\s*(.+?)(?:\. Outcome:|$)"),
+            outcome=_match(content, r"Outcome:\s*(.+?)(?:\. Outcome status:|$)"),
+            outcome_status=_match(content, r"Outcome status:\s*(\w+)"),
+            source_type=source_type,
+            raw_content=content,
+        )
+
+
+def _feedback_tail(content: str) -> str | None:
+    """Tail number from TailMemory feedback text ("... for aircraft VT-ABC.")."""
+    found = re.search(r"feedback for aircraft\s+([A-Z]{1,2}-[A-Z0-9]+)", content)
+    return found.group(1) if found else None
 
 
 def _match(value: str, pattern: str) -> str | None:

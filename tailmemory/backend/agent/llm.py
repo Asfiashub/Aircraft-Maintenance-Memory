@@ -39,27 +39,20 @@ class DiagnosisAgent:
         self, tail_number: str, current_fault: str, memories: list[RecalledMemory]
     ) -> DiagnosisResult:
         self._ensure_configured()
+        model = self.settings.groq_primary_model
         user_prompt = diagnosis_user_prompt(tail_number, current_fault, memories)
-        first_error: Exception | None = None
-        for model in (
-            self.settings.groq_primary_model,
-            self.settings.groq_fallback_model,
-        ):
+        raw = self._complete(model, user_prompt)
+        try:
+            return self._validate(raw)
+        except (json.JSONDecodeError, ValidationError):
+            # One correction attempt on the same model if the JSON was invalid.
+            corrected = self._complete(model, user_prompt + "\n\n" + correction_prompt(raw))
             try:
-                raw = self._complete(model, user_prompt)
-                try:
-                    return self._validate(raw)
-                except (json.JSONDecodeError, ValidationError) as error:
-                    corrected = self._complete(
-                        model,
-                        diagnosis_user_prompt(tail_number, current_fault, memories)
-                        + "\n\n"
-                        + correction_prompt(raw),
-                    )
-                    return self._validate(corrected)
-            except Exception as error:
-                first_error = error
-        raise GroqAPIError(f"Groq diagnosis failed after fallback: {first_error}")
+                return self._validate(corrected)
+            except (json.JSONDecodeError, ValidationError) as error:
+                raise GroqAPIError(
+                    f"Groq returned invalid diagnosis JSON twice: {error}"
+                ) from error
 
     def _complete(self, model: str, user_prompt: str) -> str:
         response = requests.post(
